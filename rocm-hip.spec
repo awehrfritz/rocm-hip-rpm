@@ -158,8 +158,8 @@ cd build
 %files
 %doc README.md
 %license LICENSE.txt
-# FIXME: hipInfo shouldn't be hidden, nor in libdir:
-%{_libdir}/.hipInfo
+# This is not needed, and debian excludes it too:
+%exclude %{_libdir}/.hipInfo
 %{_libdir}/libamdhip64.so.5{,.*}
 %{_libdir}/libhiprtc.so.5{,.*}
 %{_libdir}/libhiprtc-builtins.so.5{,.*}
