@@ -91,7 +91,8 @@ The AMD ROCm HIP development package.
 
 %package samples
 Summary:        ROCm HIP samples
-Requires:       %{name}%{?_isa} = %{version}-%{release}
+Requires:       %{name} = %{version}-%{release}
+BuildArch:      noarch
 
 %description samples
 The AMD ROCm HIP samples.
@@ -110,6 +111,11 @@ sed 's/LIBRARY DESTINATION lib/LIBRARY DESTINATION \${CMAKE_INSTALL_LIBDIR}/g' \
 sed -e "/CMAKE_INSTALL_RPATH.*CMAKE_INSTALL_LIBDIR/d" \
     -e "/CMAKE_INSTALL_RPATH_USE_LINK_PATH.*TRUE/d" \
     -i CMakeLists.txt
+
+# Fix script permissions:
+chmod 755 ../HIP-rocm-%{version}/bin/*
+# FIXME: perl module files should be installed into lib or share:
+chmod 644 ../HIP-rocm-%{version}/bin/*.pm
 
 # Unpack bundled sources manually
 cd ..
@@ -158,8 +164,8 @@ cd build
 %files
 %doc README.md
 %license LICENSE.txt
-# FIXME: hipInfo shouldn't be hidden, nor in libdir:
-%{_libdir}/.hipInfo
+# This is not needed, and debian excludes it too:
+%exclude %{_libdir}/.hipInfo
 %{_libdir}/libamdhip64.so.5{,.*}
 %{_libdir}/libhiprtc.so.5{,.*}
 %{_libdir}/libhiprtc-builtins.so.5{,.*}
