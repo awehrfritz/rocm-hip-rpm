@@ -112,6 +112,11 @@ sed -e "/CMAKE_INSTALL_RPATH.*CMAKE_INSTALL_LIBDIR/d" \
     -e "/CMAKE_INSTALL_RPATH_USE_LINK_PATH.*TRUE/d" \
     -i CMakeLists.txt
 
+# Fix script permissions:
+chmod 755 ../HIP-rocm-%{version}/bin/*
+# FIXME: perl module files should be installed into lib or share:
+chmod 644 ../HIP-rocm-%{version}/bin/*.pm
+
 # Unpack bundled sources manually
 cd ..
 gzip -dc %{SOURCE2} | tar -xof -
