@@ -155,6 +155,20 @@ cd build
     -DFILE_REORG_BACKWARD_COMPATIBILITY=OFF \
     -DCMAKE_INSTALL_LIBDIR=%{_lib} \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo
+# Fix hipInfo and hipVersion issues
+source ./.hipInfo
+sed -e '/# Read .hipInfo/,+3d' \
+    -e "s@\$hipInfo{'HIP_COMPILER'}.*@\"$HIP_COMPILER\";@" \
+    -e "s@\$hipInfo{'HIP_RUNTIME'}.*@\"$HIP_RUNTIME\";@" \
+    -i ./bin/hipvars.pm
+source ./.hipVersion
+[[ -z $HIP_VERSION_GITHASH ]] && HIP_VERSION_GITHASH=0
+sed -e '/# Read .hipVersion/,+2d' \
+    -e "s@\$hipVersion{'HIP_VERSION_MAJOR'}.*@\"$HIP_VERSION_MAJOR\";@" \
+    -e "s@\$hipVersion{'HIP_VERSION_MINOR'}.*@\"$HIP_VERSION_MINOR\";@" \
+    -e "s@\$hipVersion{'HIP_VERSION_PATCH'}.*@\"$HIP_VERSION_PATCH\";@" \
+    -e "s@\$hipVersion{'HIP_VERSION_GITHASH'}.*@\"$HIP_VERSION_GITHASH\";@" \
+    -i ./bin/hipvars.pm
 %cmake_build
 
 %install
@@ -174,8 +188,8 @@ cd build
 
 %files devel
 %{_bindir}/*
-# FIXME: hipVersion shouldn't be hidden, nor in bindir:
-%{_bindir}/.hipVersion
+# This is not needed, and debian excludes it too:
+%exclude %{_bindir}/.hipVersion
 %{_includedir}/hip
 %{_libdir}/libamdhip64.so
 %{_libdir}/libhiprtc.so
