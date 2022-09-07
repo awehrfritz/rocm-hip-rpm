@@ -91,7 +91,8 @@ The AMD ROCm HIP development package.
 
 %package samples
 Summary:        ROCm HIP samples
-Requires:       %{name}%{?_isa} = %{version}-%{release}
+Requires:       %{name} = %{version}-%{release}
+BuildArch:      noarch
 
 %description samples
 The AMD ROCm HIP samples.
