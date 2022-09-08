@@ -174,8 +174,8 @@ cd build
 
 %files devel
 %{_bindir}/*
-# FIXME: hipVersion shouldn't be hidden, nor in bindir:
-%{_bindir}/.hipVersion
+# This is not needed, and debian excludes it too:
+%exclude %{_bindir}/.hipVersion
 %{_includedir}/hip
 %{_libdir}/libamdhip64.so
 %{_libdir}/libhiprtc.so
