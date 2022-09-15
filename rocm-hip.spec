@@ -46,6 +46,9 @@ Patch2:         https://github.com/ROCm-Developer-Tools/hipamd/commit/e8a481c420
 Patch3:         https://github.com/ROCm-Developer-Tools/hipamd/commit/f892306e227983a7c1943992ba70bf4e4b189105.patch#/0003-SWDEV-335990-Use_GNUInstallDirs.patch
 # SWDEV-335990 - Use GNUInstallDirs - part 2
 Patch4:         https://github.com/ROCm-Developer-Tools/hipamd/commit/c92a12faf39210e24d329cc2c7e94dd124e69fed.patch#/0004-SWDEV-335990-Use_GNUInstallDirs.patch
+# Fix hipcc.pl and hipvars.pm for an installation in /usr
+#Patch100:       https://raw.githubusercontent.com/awehrfritz/rocm-hip-rpm/test-copr-build/0100-Fix-hipcc-hipvars.patch
+Patch100:       https://raw.githubusercontent.com/awehrfritz/rocm-hip-rpm/8e63900133fe9b08ab25893dc8fad9c3c4cd2ac5/0100-Fix-hipcc-hipvars.patch
 # SWDEV-336248 - Don't exclude cl_egl.h from install
 Patch200:       https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/commit/b98828a206fef952abe2f65c337dafe0316c9e9e.patch#/0200-SWDEV-336248-Don-t-exclude-cl_egl.h-from-install.patch
 
@@ -121,6 +124,11 @@ chmod 644 ../HIP-rocm-%{version}/bin/*.pm
 cd ..
 gzip -dc %{SOURCE2} | tar -xof -
 gzip -dc %{SOURCE3} | tar -xof -
+cd -
+
+# HIP - apply patches
+cd ../HIP-rocm-%{version}
+%autopatch -p1 -m 100 -M 199
 cd -
 
 # ROCm-OpenCL-Runtime - apply upstream patches

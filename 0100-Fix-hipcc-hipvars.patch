@@ -1,0 +1,212 @@
+diff '--color=auto' -rup a/bin/hipcc.pl b/bin/hipcc.pl
+--- a/bin/hipcc.pl	2022-07-05 11:20:22.000000000 +0300
++++ b/bin/hipcc.pl	2022-09-15 19:01:55.570981557 +0300
+@@ -103,8 +103,10 @@ $CUDA_PATH      =   $hipvars::CUDA_PATH;
+ $HIP_PATH       =   $hipvars::HIP_PATH;
+ $ROCM_PATH      =   $hipvars::ROCM_PATH;
+ $HIP_VERSION    =   $hipvars::HIP_VERSION;
++$HIP_VERSION_PATH = $hipvars::HIP_VERSION_PATH;
+ $HSA_PATH       =   $hipvars::HSA_PATH;
+ $HIP_ROCCLR_HOME =   $hipvars::HIP_ROCCLR_HOME;
++$LIB            =   $hipvars::LIB;
+ 
+ if ($HIP_PLATFORM eq "amd") {
+   # If using ROCclr runtime, need to find HIP_ROCCLR_HOME
+@@ -113,14 +115,16 @@ if ($HIP_PLATFORM eq "amd") {
+   }
+   $HIP_INCLUDE_PATH = "$HIP_ROCCLR_HOME/include";
+   if (!defined $HIP_LIB_PATH) {
+-    $HIP_LIB_PATH = "$HIP_ROCCLR_HOME/lib";
++    $HIP_LIB_PATH = "$HIP_ROCCLR_HOME/$LIB";
+   }
+ 
+   if (!defined $DEVICE_LIB_PATH) {
+     if (-e "$ROCM_PATH/amdgcn/bitcode") {
+       $DEVICE_LIB_PATH = "$ROCM_PATH/amdgcn/bitcode";
+-    }
+-    else {
++    } elsif (-e "$ROCM_PATH/$LIB/amdgcn/bitcode") {
++      # Device library path in Debian and Fedora Linux distribution packages
++      $DEVICE_LIB_PATH = "$ROCM_PATH/$LIB/amdgcn/bitcode";
++    } else {
+       # This path is to support an older build of the device library
+       # TODO: To be removed in the future.
+       $DEVICE_LIB_PATH = "$ROCM_PATH/lib";
+@@ -162,13 +166,13 @@ if ($HIP_PLATFORM eq "amd") {
+     $HIP_CLANG_TARGET = chomp($HIP_CLANG_TARGET);
+ 
+     if (! defined $HIP_CLANG_INCLUDE_PATH) {
+-        $HIP_CLANG_INCLUDE_PATH = abs_path("$HIP_CLANG_PATH/../lib/clang/$HIP_CLANG_VERSION/include");
++        $HIP_CLANG_INCLUDE_PATH = abs_path("$HIP_CLANG_PATH/../$LIB/clang/$HIP_CLANG_VERSION/include");
+     }
+     if (! defined $HIP_INCLUDE_PATH) {
+         $HIP_INCLUDE_PATH = "$HIP_PATH/include";
+     }
+     if (! defined $HIP_LIB_PATH) {
+-        $HIP_LIB_PATH = "$HIP_PATH/lib";
++        $HIP_LIB_PATH = "$HIP_PATH/$LIB";
+     }
+     if ($verbose & 0x2) {
+         print ("ROCM_PATH=$ROCM_PATH\n");
+@@ -199,14 +203,45 @@ if ($HIP_PLATFORM eq "amd") {
+         $HIPCXXFLAGS .= " -Xclang -fallow-half-arguments-and-returns -D__HIP_HCC_COMPAT_MODE__=1";
+     }
+ 
+-    if (not $isWindows) {
+-        $HSA_PATH=$ENV{'HSA_PATH'} // "$ROCM_PATH/hsa";
++    if ((not $isWindows) and (-d "$HSA_PATH/include") and ("$HSA_PATH/include" ne $HIP_INCLUDE_PATH)) {
+         $HIPCXXFLAGS .= " -isystem $HSA_PATH/include";
+         $HIPCFLAGS .= " -isystem $HSA_PATH/include";
+     }
+ 
++    # Clang requires the HIP version information, passed either via a
++    # commandline argument or by reading it from the .hipVersion file
++    # (see clang/lib/Driver/ToolChains/AMDGPU.cpp).  Since there is no FHS
++    # compliant location for .hipVersion where clang will still be able to find
++    # it, .hipVersion has been omitted in the downstream distribution packages
++    # (Debian/Fedora) and subsequently the hip version needs to be passed
++    # explicitly.  Subsequently, clang requires the ROCm path to be passed via
++    # the respective command line argument as well.
++    if (! -f $HIP_VERSION_PATH) {
++        my $v = (split('-', $HIP_VERSION))[0]; # Remove the git hash
++        $HIPCC_COMPILE_FLAGS_APPEND .= " --rocm-path=$ROCM_PATH --hip-version=$v";
++        $HIPCC_LINK_FLAGS_APPEND .= " --rocm-path=$ROCM_PATH --hip-version=$v";
++    }
++
++    # Linking ROCm 5.2 device libraries with ROCm compilers other than AMD's
++    # Clang version released with ROCm 5.2 results in an undefined symbol lld
++    # error. A workaround has been discussed here:
++    # https://docs.olcf.ornl.gov/systems/crusher_quick_start_guide.html#olcfdev-1118-link-errors-with-rocm-5-2-0-and-cce
++    my @device_libs = (
++        'hip.bc',
++        'ocml.bc',
++        'ockl.bc',
++        'oclc_daz_opt_off.bc',
++        'oclc_unsafe_math_off.bc',
++        'oclc_finite_only_off.bc',
++        'oclc_correctly_rounded_sqrt_on.bc',
++        'oclc_wavefrontsize64_on.bc',
++        'oclc_isa_version_90a.bc',
++        'oclc_abi_version_400.bc'
++    );
++    foreach $dl (@device_libs) {
++        $HIPCC_COMPILE_FLAGS_APPEND .= " --hip-device-lib=$dl";
++    }
+ } elsif ($HIP_PLATFORM eq "nvidia") {
+-    $CUDA_PATH=$ENV{'CUDA_PATH'} // '/usr/local/cuda';
+     $HIP_INCLUDE_PATH = "$HIP_PATH/include";
+     if ($verbose & 0x2) {
+         print ("CUDA_PATH=$CUDA_PATH\n");
+@@ -225,8 +260,10 @@ if ($HIP_PLATFORM eq "amd") {
+ }
+ 
+ # Add paths to common HIP includes:
+-$HIPCXXFLAGS .= " -isystem \"$HIP_INCLUDE_PATH\"" ;
+-$HIPCFLAGS .= " -isystem \"$HIP_INCLUDE_PATH\"" ;
++if ((-d "$HIP_INCLUDE_PATH") and ("$HIP_INCLUDE_PATH" ne "/usr/include")) {
++    $HIPCXXFLAGS .= " -isystem \"$HIP_INCLUDE_PATH\"" ;
++    $HIPCFLAGS .= " -isystem \"$HIP_INCLUDE_PATH\"" ;
++}
+ 
+ my $compileOnly = 0;
+ my $needCXXFLAGS = 0;  # need to add CXX flags to compile step
+@@ -704,16 +741,16 @@ if ($HIP_PLATFORM eq "amd") {
+ 
+     if (not $isWindows  and not $compileOnly) {
+       if ($linkType eq 0) {
+-        $toolArgs = " -L$HIP_LIB_PATH -lamdhip64 -L$ROCM_PATH/lib -lhsa-runtime64 -ldl -lnuma " . ${toolArgs};
++        $toolArgs = " -L$HIP_LIB_PATH -lamdhip64 -L$ROCM_PATH/$LIB -lhsa-runtime64 -ldl -lnuma " . ${toolArgs};
+       } else {
+-        $toolArgs = ${toolArgs} . " -Wl,--enable-new-dtags -Wl,-rpath=$HIP_LIB_PATH:$ROCM_PATH/lib -lamdhip64 ";
++        $toolArgs = ${toolArgs} . " -Wl,--enable-new-dtags -Wl,-rpath=$HIP_LIB_PATH:$ROCM_PATH/$LIB -lamdhip64 ";
+       }
+       # To support __fp16 and _Float16, explicitly link with compiler-rt
+-      $HIP_CLANG_BUILTIN_LIB="$HIP_CLANG_PATH/../lib/clang/$HIP_CLANG_VERSION/lib/$HIP_CLANG_TARGET/libclang_rt.builtins.a";
++      $HIP_CLANG_BUILTIN_LIB="$HIP_CLANG_PATH/../$LIB/clang/$HIP_CLANG_VERSION/lib/$HIP_CLANG_TARGET/libclang_rt.builtins.a";
+       if (-e $HIP_CLANG_BUILTIN_LIB) {
+-        $toolArgs .= " -L$HIP_CLANG_PATH/../lib/clang/$HIP_CLANG_VERSION/lib/$HIP_CLANG_TARGET -lclang_rt.builtins "
++        $toolArgs .= " -L$HIP_CLANG_PATH/../$LIB/clang/$HIP_CLANG_VERSION/lib/$HIP_CLANG_TARGET -lclang_rt.builtins "
+       } else {
+-        $toolArgs .= " -L$HIP_CLANG_PATH/../lib/clang/$HIP_CLANG_VERSION/lib/linux -lclang_rt.builtins-x86_64 "
++        $toolArgs .= " -L$HIP_CLANG_PATH/../$LIB/clang/$HIP_CLANG_VERSION/lib/linux -lclang_rt.builtins-x86_64 "
+       }
+     }
+ }
+diff '--color=auto' -rup a/bin/hipvars.pm b/bin/hipvars.pm
+--- a/bin/hipvars.pm	2022-07-05 11:20:22.000000000 +0300
++++ b/bin/hipvars.pm	2022-09-15 19:02:25.026955105 +0300
+@@ -74,29 +74,57 @@ $isWindows =  ($^O eq 'MSWin32' or $^O e
+ # ROCM_PATH is defined relative to HIP_PATH else it is hardcoded to /opt/rocm.
+ #
+ $HIP_PATH=$ENV{'HIP_PATH'} // dirname(Cwd::abs_path("$0/../")); # use parent directory of hipcc
+-if (-e "$HIP_PATH/../bin/rocm_agent_enumerator") {
+-    $ROCM_PATH=$ENV{'ROCM_PATH'} // dirname("$HIP_PATH"); # use parent directory of HIP_PATH ,FILE_REORG
+-}elsif (-e "$HIP_PATH/bin/rocm_agent_enumerator") {
++# ROCm root directory
++if (-e "$HIP_PATH/bin/rocm_agent_enumerator") {
+     $ROCM_PATH=$ENV{'ROCM_PATH'} // "$HIP_PATH"; # use HIP_PATH
++} elsif (-e "$HIP_PATH/../bin/rocm_agent_enumerator") {
++    $ROCM_PATH=$ENV{'ROCM_PATH'} // dirname("$HIP_PATH"); # use parent directory of HIP_PATH, FILE_REORG
+ } else {
+     $ROCM_PATH=$ENV{'ROCM_PATH'} // "/opt/rocm";
+ }
++# HSA runtime
++if (-d "$ROCM_PATH/hsa") {
++    $HSA_PATH=$ENV{'HSA_PATH'} // "$ROCM_PATH/hsa";
++} else {
++    $HSA_PATH=$ENV{'HSA_PATH'} // "$ROCM_PATH";
++}
++# CUDA runtime
+ $CUDA_PATH=$ENV{'CUDA_PATH'} // '/usr/local/cuda';
+-$HSA_PATH=$ENV{'HSA_PATH'} // "$ROCM_PATH/hsa";
+ 
+ # Windows has a different structure, all binaries are inside hip/bin
+ if ($isWindows) {
+     $HIP_CLANG_PATH=$ENV{'HIP_CLANG_PATH'} // "$HIP_PATH/bin";
+ } else {
+-    $HIP_CLANG_PATH=$ENV{'HIP_CLANG_PATH'} // "$ROCM_PATH/llvm/bin";
++    if (-d "$ROCM_PATH/llvm/bin") {
++        $HIP_CLANG_PATH=$ENV{'HIP_CLANG_PATH'} // "$ROCM_PATH/llvm/bin";
++    } else {
++        $HIP_CLANG_PATH=$ENV{'HIP_CLANG_PATH'} // "$ROCM_PATH/bin";
++    }
+ }
+ # HIP_ROCCLR_HOME is used by Windows builds
+ $HIP_ROCCLR_HOME=$ENV{'HIP_ROCCLR_HOME'};
+ 
++if ($isWindows) {
++    $LIB = "lib";
++} else {
++    # Look for the AMD HIP library to determine the lib directory name
++    if (my @libs = glob("$HIP_PATH/lib*/libamdhip64*.so*")) {
++        # Multi-lib layout (Fedora and others: /usr/lib64)
++        $LIB = basename(dirname($libs[0]));
++    } elsif (@libs = glob("$HIP_PATH/lib/*/libamdhip64*.so*")) {
++        # Multi-arch layout (Debian: /usr/lib/x86_64-linux-gnu)
++        $LIB = "lib/" . basename(dirname($libs[0]));
++    } else {
++        # Set to 'lib' for backwards compatibility with cases that are not
++        # caught in the above checks
++        $LIB = "lib";
++    }
++}
++
+ if (defined $HIP_ROCCLR_HOME) {
+-    $HIP_INFO_PATH= "$HIP_ROCCLR_HOME/lib/.hipInfo";
++    $HIP_INFO_PATH= "$HIP_ROCCLR_HOME/$LIB/.hipInfo";
+ } else {
+-    $HIP_INFO_PATH= "$HIP_PATH/lib/.hipInfo"; # use actual file
++    $HIP_INFO_PATH= "$HIP_PATH/$LIB/.hipInfo"; # use actual file
+ }
+ #---
+ #HIP_PLATFORM controls whether to use nvidia or amd platform:
+@@ -151,7 +179,8 @@ if ($HIP_COMPILER eq "clang") {
+ #---
+ # Read .hipVersion
+ my %hipVersion = ();
+-parse_config_file("$hipvars::HIP_PATH/bin/.hipVersion", \%hipVersion);
++$HIP_VERSION_PATH = "$HIP_PATH/bin/.hipVersion";
++parse_config_file("$HIP_VERSION_PATH", \%hipVersion);
+ $HIP_VERSION_MAJOR = $hipVersion{'HIP_VERSION_MAJOR'} // $HIP_BASE_VERSION_MAJOR;
+ $HIP_VERSION_MINOR = $hipVersion{'HIP_VERSION_MINOR'} // $HIP_BASE_VERSION_MINOR;
+ $HIP_VERSION_PATCH = $hipVersion{'HIP_VERSION_PATCH'} // $HIP_BASE_VERSION_PATCH;
